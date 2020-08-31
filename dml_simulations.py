@@ -19,25 +19,19 @@ np.random.seed(42)
 
 def m(X: np.array) -> np.array:
     """ helper function to get non-linear relations """
-    f1_ = (X - 2 * X ** 2 - 3 * X ** 3) / 10
+    f1_ = (X - 2 * X ** 2 - 2 * X ** 3) / 10
     f2_ = np.sin(X) * 2
-    f2_[(X > 0.5) & (X < 1)] = 2
     f_ = f1_ + f2_
-    f_[X > 3] = 3
-    f_[(X > 0) & (X < 1)] = 2
-
-    return -np.clip(-f_, a_min=-7, a_max=7)
+    f_[X > 0] = -1 * X[X > 0]
+    return np.clip(f_, a_min=-5, a_max=3)
 
 
 def g(X: np.array) -> np.array:
     """ helper function to get non-linear relations """
-    f1_ = (X - 3 * X ** 2) / 10
-    f2_ = -np.sin(X)
-    f2_[(X > 0.5) & (X < 2)] = 2
-    f_ = f1_ + f2_
-    f_[(X > 1) & (X < 2)] = -2
-
-    return np.clip(f_, a_min=-7, a_max=7)
+    f_ = -np.sin(X)
+    f_[(X > 1)] = 2
+    f_[(X > 3)] = 1
+    return f_
 
 
 def plot_mX_gX(path="dml_simulations_data_graph.pdf") -> None:
@@ -105,11 +99,14 @@ class ExactWeights:
 
 """
 
-if executed as the main script, will run simulations for 2 variants of the
+if executed as the main script, will run simulations for 3 variants of the
 ensemble Double Machine Learning algorithm as in Chernozhukov et al. (2017):
 
 - 'classic' ensemble DML2 as in Chernozhukov et al. (2017) with ensemble
-   weights summing uo to 1 pre-computed with 5-fold cross-validation
+   weights summing up to 1 pre-computed with 5-fold cross-validation
+
+- 'classic with half step' ensemble weights are computed using the same
+   fold from cross-fitting as the parameter of interest
 
 - 'custom' ensemble DML2 similar to Chernozhukov et al. (2017) but with
    step in the middle to compute cross-fit-run specific ensemble weights;
@@ -139,13 +136,13 @@ NUISANCE_ESTIMATORS = [
 ]
 ENSEMBLE_ESTIMATORS = [ExactWeights()]
 
-SIMULATIONS, CROSSFIT_RUNS, PARAM_VALUE = 200, 50, [0.5]
+SIMULATIONS, CROSSFIT_RUNS, PARAM_VALUE = 2, 2, [0.5]
 CORES_USED = 10  # multiprocessing is used in parallel at crossfiting level
 
 # specify combinations of sample x nr_features for simulations
 # this means that there will be len(N)*len(K)*SIMULATIONS runs
-N = [500, 1000]
-K = [2, 8]
+N = [100, 200]
+K = [2, 3]
 
 SIMULATION_DML_ESTIMATORS = OrderedDict(
     [
@@ -155,6 +152,15 @@ SIMULATION_DML_ESTIMATORS = OrderedDict(
                 [estimator for _, estimator in NUISANCE_ESTIMATORS],
                 crossfit_runs=CROSSFIT_RUNS,
                 nfolds=(1, 3),
+            ),
+        ),
+        (
+            "classic_in_weights",
+            DoubleMachineLearner(
+                [estimator for _, estimator in NUISANCE_ESTIMATORS],
+                crossfit_runs=CROSSFIT_RUNS,
+                nfolds=(1, 3),
+                in_ensemble_weights=True,
             ),
         ),
         (
@@ -210,7 +216,7 @@ if __name__ == "__main__":
                 )
 
                 for estimator_name, dml_estimator in SIMULATION_DML_ESTIMATORS.items():
-                    if estimator_name == "classic":
+                    if estimator_name in ["classic", "classic_in_weights"]:
                         # classic version needs to be provided with weights
                         dml_estimator.fit(
                             data[:, 1 + len(PARAM_VALUE) :],

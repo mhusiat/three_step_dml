@@ -11,6 +11,7 @@ def _two_step_orthogonalization(
     fold_combinations: tuple,
     nuisance_estim: list,
     ensemble_weights: np.array,
+    in_ensemble_weights=False,
 ) -> tuple:
     """
     orthogonalize features with an ensemble of estimators using precomputed
@@ -43,6 +44,11 @@ def _two_step_orthogonalization(
                 # fit values using the linear sample
                 fitted_values[:, t, which] = estim.predict(df_params[:, tsize + 1 :])
 
+            if in_ensemble_weights:
+                tX = fitted_values[:, t, :]
+                ensemble_weights[:, t] = np.linalg.inv(tX.T.dot(tX)).dot(
+                    tX.T.dot(df_params[:, t])
+                )
             # use pre-computed weights to combine the nuisance estimators
             estimators_linear[:, t] = fitted_values[:, t, :].dot(ensemble_weights[:, t])
 
@@ -142,6 +148,7 @@ def _run_double_machine_learning(
     ensemble_estim: list,
     ensemble_weights: np.array,
     nfolds,
+    in_ensemble_weights,
 ):
     """
     wrapper function that fits a single cross-fitting run of the model
@@ -159,7 +166,13 @@ def _run_double_machine_learning(
 
     if len(nfolds) == 2:
         orthogonalized_features = _two_step_orthogonalization(
-            nfolds, tsize, df_folds, fold_combinations, nuisance_estim, ensemble_weights
+            nfolds,
+            tsize,
+            df_folds,
+            fold_combinations,
+            nuisance_estim,
+            ensemble_weights,
+            in_ensemble_weights=in_ensemble_weights,
         )
     elif len(nfolds) == 3:
         orthogonalized_features = _three_step_orthogonalization(
@@ -271,6 +284,7 @@ class DoubleMachineLearner:
         ensemble_weights=None,
         crossfit_runs=50,
         nfolds=(1, 1, 3),
+        in_ensemble_weights=False,
     ):
         """
         initialize the estimator
@@ -305,6 +319,7 @@ class DoubleMachineLearner:
         self.ensemble_estimators = ensemble_estimators
         self.crossfit_runs = crossfit_runs
         self.nfolds = nfolds
+        self.in_ensemble_weights = in_ensemble_weights
 
     def fit(
         self, X: np.array, T: np.array, Y: np.array, cores_used=1, ensemble_weights=None
@@ -370,6 +385,7 @@ class DoubleMachineLearner:
                         self.ensemble_estimators,
                         ensemble_weights,
                         self.nfolds,
+                        self.in_ensemble_weights,
                     ),
                 )
                 for i in range(self.crossfit_runs)
